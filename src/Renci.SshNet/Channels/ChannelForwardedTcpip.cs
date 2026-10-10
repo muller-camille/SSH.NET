@@ -22,6 +22,7 @@ namespace Renci.SshNet.Channels
         private readonly ILogger _logger;
         private Socket _socket;
         private IForwardedPort _forwardedPort;
+        private X11ConnectionSetup _x11Setup;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="ChannelForwardedTcpip"/> class.
@@ -59,7 +60,7 @@ namespace Renci.SshNet.Channels
         /// </value>
         public override ChannelTypes ChannelType
         {
-            get { return ChannelTypes.ForwardedTcpip; }
+            get { return _x11Setup is null ? ChannelTypes.ForwardedTcpip : ChannelTypes.X11; }
         }
 
         /// <summary>
@@ -69,6 +70,17 @@ namespace Renci.SshNet.Channels
         /// <param name="forwardedPort">The forwarded port for which the channel is opened.</param>
         public void Bind(IPEndPoint remoteEndpoint, IForwardedPort forwardedPort)
         {
+            Bind(remoteEndpoint, forwardedPort, x11Setup: null);
+        }
+
+        /// <summary>
+        /// Binds an X11 channel to the local X server.
+        /// </summary>
+        /// <param name="remoteEndpoint">The endpoint of the local X server.</param>
+        /// <param name="forwardedPort">The forwarded port for which the channel is opened.</param>
+        /// <param name="x11Setup">Checks and replaces the authorization of the X11 connection before anything reaches the local X server.</param>
+        public void Bind(IPEndPoint remoteEndpoint, IForwardedPort forwardedPort, X11ConnectionSetup x11Setup)
+        {
             if (!IsConnected)
             {
                 throw new SshException("Session is not connected.");
@@ -76,6 +88,7 @@ namespace Renci.SshNet.Channels
 
             _forwardedPort = forwardedPort;
             _forwardedPort.Closing += ForwardedPort_Closing;
+            _x11Setup = x11Setup;
 
             // Try to connect to the socket
             try
@@ -204,6 +217,31 @@ namespace Renci.SshNet.Channels
         protected override void OnData(ArraySegment<byte> data)
         {
             base.OnData(data);
+
+            var x11Setup = _x11Setup;
+            if (x11Setup is not null && x11Setup.State != X11SetupState.Accepted)
+            {
+                if (x11Setup.State == X11SetupState.Rejected)
+                {
+                    return;
+                }
+
+                var setup = x11Setup.Add(data);
+                if (setup is null)
+                {
+                    if (x11Setup.State == X11SetupState.Rejected)
+                    {
+                        _logger.LogInformation("X11 connection rejected: it does not present the cookie sent to the server");
+
+                        // the local X server sees the end of the connection, which ends the blocking receive in Bind
+                        ShutdownSocket(SocketShutdown.Send);
+                    }
+
+                    return;
+                }
+
+                data = new ArraySegment<byte>(setup);
+            }
 
             var socket = _socket;
             if (socket.IsConnected())

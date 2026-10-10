@@ -126,6 +126,32 @@ namespace Renci.SshNet
                                       int bufferSize);
 
         /// <summary>
+        /// Creates a shell stream that forwards X11 to a local X server.
+        /// </summary>
+        /// <param name="session">The SSH session.</param>
+        /// <param name="terminalName">The <c>TERM</c> environment variable.</param>
+        /// <param name="columns">The terminal width in columns.</param>
+        /// <param name="rows">The terminal width in rows.</param>
+        /// <param name="width">The terminal width in pixels.</param>
+        /// <param name="height">The terminal height in pixels.</param>
+        /// <param name="terminalModeValues">The terminal mode values.</param>
+        /// <param name="bufferSize">The size of the buffer.</param>
+        /// <param name="x11Forwarding">The X11 forwarding options, or <see langword="null"/> for none.</param>
+        /// <returns>
+        /// The created <see cref="ShellStream"/> instance.
+        /// </returns>
+        /// <exception cref="SshConnectionException">Client is not connected.</exception>
+        ShellStream CreateShellStream(ISession session,
+                                      string terminalName,
+                                      uint columns,
+                                      uint rows,
+                                      uint width,
+                                      uint height,
+                                      IDictionary<TerminalModes, uint> terminalModeValues,
+                                      int bufferSize,
+                                      X11Forwarding x11Forwarding);
+
+        /// <summary>
         /// Creates a shell stream without allocating a pseudo terminal.
         /// </summary>
         /// <param name="session">The SSH session.</param>

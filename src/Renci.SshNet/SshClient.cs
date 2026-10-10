@@ -284,6 +284,16 @@ namespace Renci.SshNet
         }
 
         /// <inheritdoc />
+        public ShellStream CreateShellStream(string terminalName, uint columns, uint rows, uint width, uint height, int bufferSize, IDictionary<TerminalModes, uint>? terminalModeValues, X11Forwarding x11Forwarding)
+        {
+            ArgumentNullException.ThrowIfNull(x11Forwarding);
+
+            EnsureSessionIsOpen();
+
+            return ServiceFactory.CreateShellStream(Session, terminalName, columns, rows, width, height, terminalModeValues, bufferSize, x11Forwarding);
+        }
+
+        /// <inheritdoc />
         public ShellStream CreateShellStreamNoTerminal(int bufferSize = -1)
         {
             EnsureSessionIsOpen();

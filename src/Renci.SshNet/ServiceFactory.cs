@@ -134,6 +134,12 @@ namespace Renci.SshNet
         }
 
         /// <inheritdoc/>
+        public ShellStream CreateShellStream(ISession session, string terminalName, uint columns, uint rows, uint width, uint height, IDictionary<TerminalModes, uint> terminalModeValues, int bufferSize, X11Forwarding x11Forwarding)
+        {
+            return new ShellStream(session, terminalName, columns, rows, width, height, terminalModeValues, bufferSize, x11Forwarding);
+        }
+
+        /// <inheritdoc/>
         public ShellStream CreateShellStreamNoTerminal(ISession session, int bufferSize)
         {
             return new ShellStream(session, bufferSize);

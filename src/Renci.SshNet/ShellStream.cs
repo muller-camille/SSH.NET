@@ -34,6 +34,7 @@ namespace Renci.SshNet
         private System.Net.ArrayBuffer _writeBuffer;
 
         private bool _disposed;
+        private X11ForwardingHandler? _x11;
 
         /// <summary>
         /// Occurs when data was received.
@@ -49,6 +50,14 @@ namespace Renci.SshNet
         /// Occurs when the channel was closed.
         /// </summary>
         public event EventHandler<EventArgs>? Closed;
+
+        /// <summary>
+        /// Gets a value indicating whether the server accepted X11 forwarding for this shell.
+        /// </summary>
+        /// <value>
+        /// <see langword="true"/> if X11 forwarding was requested and the server accepted it; otherwise, <see langword="false"/>.
+        /// </value>
+        public bool IsX11ForwardingAccepted { get; private set; }
 
         /// <summary>
         /// Gets a value indicating whether data is available on the <see cref="ShellStream"/> to be read.
@@ -82,6 +91,26 @@ namespace Renci.SshNet
         /// <exception cref="SshException">The pseudo-terminal request was not accepted by the server.</exception>
         /// <exception cref="SshException">The request to start a shell was not accepted by the server.</exception>
         internal ShellStream(ISession session, string terminalName, uint columns, uint rows, uint width, uint height, IDictionary<TerminalModes, uint> terminalModeValues, int bufferSize)
+               : this(session, terminalName, columns, rows, width, height, terminalModeValues, bufferSize, x11Forwarding: null)
+        {
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="ShellStream"/> class.
+        /// </summary>
+        /// <param name="session">The SSH session.</param>
+        /// <param name="terminalName">The <c>TERM</c> environment variable.</param>
+        /// <param name="columns">The terminal width in columns.</param>
+        /// <param name="rows">The terminal width in rows.</param>
+        /// <param name="width">The terminal width in pixels.</param>
+        /// <param name="height">The terminal height in pixels.</param>
+        /// <param name="terminalModeValues">The terminal mode values.</param>
+        /// <param name="bufferSize">The size of the buffer.</param>
+        /// <param name="x11Forwarding">The X11 forwarding options, or <see langword="null"/> for none.</param>
+        /// <exception cref="SshException">The channel could not be opened.</exception>
+        /// <exception cref="SshException">The pseudo-terminal request was not accepted by the server.</exception>
+        /// <exception cref="SshException">The request to start a shell was not accepted by the server.</exception>
+        internal ShellStream(ISession session, string terminalName, uint columns, uint rows, uint width, uint height, IDictionary<TerminalModes, uint> terminalModeValues, int bufferSize, X11Forwarding? x11Forwarding)
                : this(session, bufferSize, noTerminal: false)
         {
             try
@@ -91,6 +120,21 @@ namespace Renci.SshNet
                 if (!_channel.SendPseudoTerminalRequest(terminalName, columns, rows, width, height, terminalModeValues))
                 {
                     throw new SshException("The pseudo-terminal request was not accepted by the server. Consult the server log for more information.");
+                }
+
+                if (x11Forwarding is not null)
+                {
+                    // Before the request: the server may open X11 channels as soon as it has accepted it.
+                    _x11 = X11ForwardingHandler.Attach(session, x11Forwarding);
+                    IsX11ForwardingAccepted = _channel.SendX11ForwardingRequest(x11Forwarding.SingleConnection,
+                                                                                X11ConnectionSetup.CookieProtocol,
+                                                                                _x11.FakeCookieHex,
+                                                                                x11Forwarding.ScreenNumber);
+                    if (!IsX11ForwardingAccepted)
+                    {
+                        _x11.Release();
+                        _x11 = null;
+                    }
                 }
 
                 if (!_channel.SendShellRequest())
@@ -984,6 +1028,9 @@ namespace Renci.SshNet
                 _channel.DataReceived -= Channel_DataReceived;
                 _channel.Closed -= Channel_Closed;
                 _channel.Dispose();
+
+                _x11?.Release();
+                _x11 = null;
 
                 Monitor.PulseAll(_sync);
             }
