@@ -186,6 +186,43 @@ namespace Renci.SshNet
         }
 
         /// <summary>
+        /// Gets the number of messages received from the server on the current connection: channel data, answers to
+        /// requests (keep-alive requests included), and so on.
+        /// </summary>
+        /// <value>
+        /// The number of messages received, or zero when the client is not connected. An application can tell from it
+        /// whether the server still answers, for instance after <see cref="SendServerAliveRequest"/>.
+        /// </value>
+        public long ReceivedMessageCount
+        {
+            get
+            {
+                return Session?.ReceivedMessageCount ?? 0;
+            }
+        }
+
+        /// <summary>
+        /// Sends a "keepalive@openssh.com" global request, which the server must answer: its answer increases
+        /// <see cref="ReceivedMessageCount"/>. Unlike the keep-alive messages sent every <see cref="KeepAliveInterval"/>,
+        /// it does not count towards <see cref="KeepAliveCountMax"/>.
+        /// </summary>
+        /// <returns>
+        /// <see langword="true"/> if the request was sent; otherwise, <see langword="false"/> (client not connected).
+        /// </returns>
+        /// <remarks>
+        /// As for <see cref="KeepAliveCountMax"/>, do not start a <see cref="ForwardedPortRemote"/> while using this.
+        /// </remarks>
+        /// <exception cref="ObjectDisposedException">The method was called after the client was disposed.</exception>
+        public bool SendServerAliveRequest()
+        {
+            CheckDisposed();
+
+            var session = Session;
+            return session is not null && session.IsConnected &&
+                   session.TrySendMessage(new GlobalRequestMessage("keepalive@openssh.com"u8.ToArray(), wantReply: true));
+        }
+
+        /// <summary>
         /// Occurs when an error occurred.
         /// </summary>
         public event EventHandler<ExceptionEventArgs>? ErrorOccurred;

@@ -99,6 +99,23 @@ namespace Renci.SshNet.Tests.Classes
         }
 
         [TestMethod]
+        public void ReceivedMessageCount_IsTheSessionCount()
+        {
+            Interlocked.Exchange(ref _receivedMessageCount, 5);
+
+            Assert.AreEqual(5, _client.ReceivedMessageCount);
+        }
+
+        [TestMethod]
+        public void SendServerAliveRequest_SendsARequestToAnswer()
+        {
+            Assert.IsTrue(_client.SendServerAliveRequest());
+
+            Assert.AreEqual(1, Interlocked.CompareExchange(ref _requestCount, 0, 0));
+            SessionMock.Verify(p => p.OnKeepAliveTimeout(It.IsAny<string>()), Times.Never);
+        }
+
+        [TestMethod]
         public void KeepAliveCountMax_Negative_Throws()
         {
             Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => _client.KeepAliveCountMax = -1);
