@@ -7,8 +7,8 @@
 set -euo pipefail
 
 repository=https://github.com/muller-camille/SSH.NET
-commit=c3245ef61d4bf06c986d7e486d1b7de4686320d7
-version=2026.0.1-zillaterm.2.gc3245ef61d
+commit=e29f02320bcf7f8888ca992e50a0a8442f6ebe8e
+version=2026.0.1-zillaterm.4.ge29f02320b
 
 root=$(cd "$(dirname "$0")" && pwd)
 out="$root/out"
