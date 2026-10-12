@@ -126,6 +126,21 @@ namespace Renci.SshNet.Tests.Classes
         }
 
         [TestMethod]
+        public void Closed_RaisedWhenServerDisconnectsSession()
+        {
+            var shellStream = CreateShellStream();
+            using var closed = new ManualResetEventSlim();
+            shellStream.Closed += (sender, e) => closed.Set();
+
+            _channelSessionMock.Setup(p => p.Dispose());
+
+            _sessionMock.Raise(p => p.Disconnected += null, EventArgs.Empty);
+
+            Assert.IsTrue(closed.Wait(TimeSpan.FromSeconds(5)));
+            Assert.IsFalse(shellStream.CanWrite);
+        }
+
+        [TestMethod]
         public void ChangeWindowSize_AfterDispose_ThrowsObjectDisposedException()
         {
             var shellStream = CreateShellStream();

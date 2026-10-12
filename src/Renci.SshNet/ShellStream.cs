@@ -1045,7 +1045,16 @@ namespace Renci.SshNet
 
         private void Session_Disconnected(object? sender, EventArgs e)
         {
+            var wasOpen = !_disposed;
+
             Dispose();
+
+            // The server closed the whole connection: the shell is closed with it, as when its channel is closed.
+            if (wasOpen && Closed != null)
+            {
+                // Handle event on different thread
+                ThreadAbstraction.ExecuteThread(() => Closed?.Invoke(this, EventArgs.Empty));
+            }
         }
 
         private void Channel_Closed(object? sender, ChannelEventArgs e)
