@@ -196,6 +196,10 @@ namespace Renci.SshNet.Tests.Classes
             {
             }
 
+            public long ReceivedMessageCount => 0;
+
+            public void OnKeepAliveTimeout(string message) => throw new NotImplementedException();
+
             public void Disconnect() => throw new NotImplementedException();
 
             public void RegisterMessage(string messageName) => throw new NotImplementedException();

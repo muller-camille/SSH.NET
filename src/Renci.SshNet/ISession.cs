@@ -119,6 +119,22 @@ namespace Renci.SshNet
         void OnDisconnecting();
 
         /// <summary>
+        /// Gets the number of messages received from the server since the session was connected.
+        /// </summary>
+        /// <value>
+        /// The number of messages received from the server.
+        /// </value>
+        long ReceivedMessageCount { get; }
+
+        /// <summary>
+        /// Called when the server left keep-alive requests unanswered: raises <see cref="ErrorOccured"/> with an
+        /// <see cref="SshConnectionException"/> (<see cref="Messages.Transport.DisconnectReason.ConnectionLost"/>) and
+        /// disconnects.
+        /// </summary>
+        /// <param name="message">The description of the error.</param>
+        void OnKeepAliveTimeout(string message);
+
+        /// <summary>
         /// Registers SSH message with the session.
         /// </summary>
         /// <param name="messageName">The name of the message to register with the session.</param>

@@ -168,6 +168,11 @@ namespace Renci.SshNet
         private bool _isDisconnecting;
 
         /// <summary>
+        /// Number of messages received from the server (see <see cref="ReceivedMessageCount"/>).
+        /// </summary>
+        private long _receivedMessageCount;
+
+        /// <summary>
         /// Indicates whether it is the init kex.
         /// </summary>
         private bool _isInitialKex;
@@ -875,6 +880,18 @@ namespace Renci.SshNet
         void ISession.WaitOnHandle(WaitHandle waitHandle)
         {
             WaitOnHandle(waitHandle, ConnectionInfo.Timeout);
+        }
+
+        /// <inheritdoc/>
+        public long ReceivedMessageCount
+        {
+            get { return Interlocked.Read(ref _receivedMessageCount); }
+        }
+
+        /// <inheritdoc/>
+        void ISession.OnKeepAliveTimeout(string message)
+        {
+            RaiseError(new SshConnectionException(message, DisconnectReason.ConnectionLost));
         }
 
         /// <summary>
@@ -2008,6 +2025,7 @@ namespace Renci.SshNet
                     }
 
                     // process message
+                    _ = Interlocked.Increment(ref _receivedMessageCount);
                     message.Process(this);
                 }
 

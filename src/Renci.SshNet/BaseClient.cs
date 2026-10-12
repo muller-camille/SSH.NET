@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 
 using Renci.SshNet.Common;
+using Renci.SshNet.Messages.Connection;
 using Renci.SshNet.Messages.Transport;
 
 namespace Renci.SshNet
@@ -25,6 +26,9 @@ namespace Renci.SshNet
         private readonly IServiceFactory _serviceFactory;
         private readonly object _keepAliveLock = new object();
         private TimeSpan _keepAliveInterval;
+        private int _keepAliveCountMax;
+        private long _keepAliveReceivedMessageCount = -1;
+        private int _keepAliveUnanswered;
         private Timer? _keepAliveTimer;
         private ConnectionInfo _connectionInfo;
         private bool _isDisposed;
@@ -139,6 +143,45 @@ namespace Renci.SshNet
                 }
 
                 _keepAliveInterval = value;
+            }
+        }
+
+        /// <summary>
+        /// Gets or sets the number of keep-alive messages in a row that the server may leave unanswered before the
+        /// connection is considered lost, like the ServerAliveCountMax option of OpenSSH.
+        /// </summary>
+        /// <value>
+        /// Zero, the default: keep-alive messages need no answer (SSH_MSG_IGNORE), and the connection is never
+        /// considered lost because of them. A positive number: keep-alive messages are "keepalive@openssh.com" global
+        /// requests, which the server must answer; when that many keep-alive messages in a row went by without any
+        /// message from the server, <see cref="ErrorOccurred"/> is raised with an <see cref="SshConnectionException"/>
+        /// (<see cref="DisconnectReason.ConnectionLost"/>) and the client is disconnected. A connection that died
+        /// silently (network change, sleep, firewall) is thus detected after about
+        /// <see cref="KeepAliveInterval"/> times this number.
+        /// </value>
+        /// <remarks>
+        /// The server answers these requests with SSH_MSG_REQUEST_SUCCESS or SSH_MSG_REQUEST_FAILURE, as it answers a
+        /// remote port forwarding request: do not start a <see cref="ForwardedPortRemote"/> while this is enabled.
+        /// </remarks>
+        /// <exception cref="ArgumentOutOfRangeException">The value is negative.</exception>
+        /// <exception cref="ObjectDisposedException">The method was called after the client was disposed.</exception>
+        public int KeepAliveCountMax
+        {
+            get
+            {
+                CheckDisposed();
+                return _keepAliveCountMax;
+            }
+            set
+            {
+                CheckDisposed();
+
+                if (value < 0)
+                {
+                    throw new ArgumentOutOfRangeException(nameof(value), "Cannot be negative.");
+                }
+
+                _keepAliveCountMax = value;
             }
         }
 
@@ -500,7 +543,14 @@ namespace Renci.SshNet
             {
                 try
                 {
-                    _ = session.TrySendMessage(new IgnoreMessage());
+                    if (_keepAliveCountMax > 0)
+                    {
+                        SendKeepAliveRequest(session);
+                    }
+                    else
+                    {
+                        _ = session.TrySendMessage(new IgnoreMessage());
+                    }
                 }
                 catch (ObjectDisposedException)
                 {
@@ -515,6 +565,32 @@ namespace Renci.SshNet
                     Monitor.Exit(_keepAliveLock);
                 }
             }
+        }
+
+        /// <summary>
+        /// Sends a keep-alive request that the server must answer, after checking that the server sent something since
+        /// the previous one: after <see cref="KeepAliveCountMax"/> keep-alive intervals in a row without any message
+        /// from the server, the connection is considered lost.
+        /// </summary>
+        /// <param name="session">The session.</param>
+        private void SendKeepAliveRequest(ISession session)
+        {
+            var received = session.ReceivedMessageCount;
+            if (received != _keepAliveReceivedMessageCount)
+            {
+                _keepAliveReceivedMessageCount = received;
+                _keepAliveUnanswered = 0;
+            }
+            else if (++_keepAliveUnanswered >= _keepAliveCountMax)
+            {
+                _logger.LogInformation("No answer from the server to {Count} keep-alive messages.", _keepAliveUnanswered);
+                session.OnKeepAliveTimeout(string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                    "The server did not answer {0} keep-alive messages in a row: the connection is lost.",
+                    _keepAliveUnanswered));
+                return;
+            }
+
+            _ = session.TrySendMessage(new GlobalRequestMessage("keepalive@openssh.com"u8.ToArray(), wantReply: true));
         }
 
         /// <summary>
@@ -550,6 +626,10 @@ namespace Renci.SshNet
         /// </returns>
         private Timer CreateKeepAliveTimer(TimeSpan dueTime, TimeSpan period)
         {
+            // new session: nothing is known yet of its answers to keep-alive requests
+            _keepAliveReceivedMessageCount = -1;
+            _keepAliveUnanswered = 0;
+
             return new Timer(state => SendKeepAliveMessage(), Session, dueTime, period);
         }
 
